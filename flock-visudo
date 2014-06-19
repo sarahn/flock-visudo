@@ -1,0 +1,71 @@
+#!/bin/sh
+
+#
+# Copyright 2014 (C) Sarah Newman <sarah.newman@computer.org>
+#
+# This software may be used and distributed according to the terms of
+# the GNU General Public License (GPL), version 2, or at your option
+# any later version.
+
+#Background:
+# On Linux, there are two locking APIs: FLOCK and the POSIX lockf.
+# Locking using one API appears to have no effect locks used with 
+# the other API.
+#
+# sudo can be built to use either flock or lockf, but there is no
+# way to select after compile time. There is a command
+# line utility for flock but no comparable one for lockf. Therefore
+# by default there is no fail-proof way to interact with the sudoers
+# file both from scripts and visudo.  This script wraps the call to
+# visudo in a call to flock such that locking can be performed between
+# command line scripts and visudo.
+
+IFS=$' \t\n'
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+usage () {
+	echo "Usage:
+	flock-visudo [-ns][-w #] [-f file]
+
+Options:
+	-n Fail rather than wait
+	-w Wait for a limited amount of time
+	-s Enable strict checking of the sudoers file
+	-f Specify an alternate sudoers file location
+"
+}
+ 
+nonblock=""
+wait=""
+strict=""
+file=/etc/sudoers
+
+while getopts f:nw:sh opt
+do
+	case $opt in
+		f)	file=$OPTARG
+				;;
+		n)	nonblock="-n"
+				;;
+		w)	wait="-w$OPTARG"
+				;;
+		s)	strict="-s"
+				;;
+		h)	usage ; exit 0
+				;;
+		esac
+done
+
+shift $((OPTIND - 1))
+
+if [ "$1" != "" ] ; then
+	usage
+	exit 1
+fi
+
+if [ ! -e "$file" ] ; then
+	echo "File $file not found."
+	exit 1
+fi
+
+/usr/bin/flock $nonblock $wait "$file" -c "/usr/sbin/visudo $strict -f \"$file\""
